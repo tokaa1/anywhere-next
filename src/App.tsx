@@ -1,27 +1,90 @@
 import { atom, useAtom, useAtomValue, useSetAtom } from 'jotai'
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { Context, LLMMessage, ModelMetadata, Provider, createOllamaProvider } from './providers';
 import { Components } from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { xonokai } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import ReactMarkdown from 'react-markdown';
+import { atomWithStorage } from 'jotai/utils'
 
 const isMac = navigator.userAgent.toLowerCase().includes('macintosh') || navigator.userAgent.toLowerCase().includes('apple');
-
-const isGeneratingAtom = atom<boolean>(false);
-const availableModelsAtom = atom<AvailableModel[]>([]);
-const currentModelAtom = atom<AvailableModel | null>(null);
-
 interface AvailableModel {
   model: ModelMetadata;
   provider: Provider;
 }
+type ChatIdentifier = string;
+const createNewChatId = () => crypto.randomUUID();
+type Pages = 'chat' | 'history' | 'settings';
+
+const pageAtom = atom<Pages>('chat');
+const isGeneratingAtom = atom<boolean>(false);
+const availableModelsAtom = atom<AvailableModel[]>([]);
+const currentModelAtom = atom<AvailableModel | null>(null);
+const currentChatNameAtom = atom<string>('New chat');
+const currentChatAtom = atom<ChatIdentifier>(createNewChatId());
 
 function App() {
+  const [page, setPage] = useAtom(pageAtom);
+  const [currentChat, setCurrentChat] = useAtom(currentChatAtom);
+  const [currentChatName, setCurrentChatName] = useAtom(currentChatNameAtom);
+
+  return <>
+    <SplitView className="box-border bg-frosted-accent-tslc min-h-[40px] rounded-xl p-[4px] my-[4px] justify-between">
+      <div className='flex items-center justify-start gap-2 h-full'>
+        <ChatHeaderButton name={currentChatName} onClick={() => setPage('chat')} />
+      </div>
+      <div className='flex items-center gap-2'>
+        <div className='box-border w-[1px] h-full py-[4px] bg-medium-frost'></div>
+        <SmallNavButton bigText>
+          +
+        </SmallNavButton>
+        <SmallNavButton>
+          History
+        </SmallNavButton>
+      </div>
+    </SplitView>
+    {page === 'chat' && <MemoizedChat key={currentChat} />}
+    {page === 'history' && <></>}
+    {page === 'settings' && <></>}
+    <SplitView className="h-[40px] flex items-center justify-center">
+      <div className="flex items-center gap-4">
+        <span className="text-xs font-sans text-white flex items-center gap-[4px]">
+          Show/Hide
+          <div className="flex items-center gap-1 border-[1px] border-white rounded-md border-solid p-[2px] pr-[3px]">
+            <span className="font-sans bg-white text-black px-1.5 py-0.5 rounded">{isMac ? '⌘' : 'Ctrl'}</span>
+            <span className="font-sans text-white">D</span>
+          </div>
+        </span>
+      </div>
+    </SplitView>
+  </>
+}
+function ChatHeaderButton({ onClick, name }: { onClick?: () => void, name: string }) {
+  if (name.length > 25) {
+    name = name.slice(0, 23) + '...';
+  }
+  // Remove quotes if present
+  name = name.replace(/^["'](.*)["']$/, '$1');
+  return <div className={`h-[30px] cursor-pointer overflow-x-auto bg-frosted-bg-tslc-darker hover:bg-frosted-bg border-1 border-solid border-white flex items-center p-[10px] py-0 transition-colors rounded-lg`} onClick={onClick}>
+    <span className={`overflow-hidden text-[12px] font-sans text-white m-0 p-0 font-bold`}>{name}</span>
+  </div>
+}
+
+function SmallNavButton({ children, onClick, bigText = false }: { children: React.ReactNode, onClick?: () => void, bigText?: boolean }) {
+  return <div className='cursor-pointer border-hard-frost hover:border-medium-frost border-[1px] border-solid min-w-[16px] h-[22px] px-[8px] items-center justify-center bg-frosted-bg-tslc-darker hover:bg-frosted-bg flex items-center p-[4px] transition-colors rounded-lg' onClick={onClick}>
+    <span className={`font-sans ${bigText ? 'text-m' : 'text-xs'} font-semibold text-white`}>
+      {children}
+    </span>
+  </div>
+}
+
+const MemoizedChat = memo(function Chat() {
+  const currentChatName = useSetAtom(currentChatNameAtom);
   const setIsGenerating = useSetAtom(isGeneratingAtom);
-  const [contextState, setContextState] = useState<Context>([])
+  const [contextState, setContextState] = useState<Context>([]);
   const [availableModels, setAvailableModels] = useAtom(availableModelsAtom);
   const [currentModel, setCurrentModel] = useAtom(currentModelAtom);
+
   // Load list of all models
   useEffect(() => {
     const ollamaProvider = createOllamaProvider();
@@ -42,6 +105,7 @@ function App() {
     if (!currentModel)
       return;
 
+    doSummaryTitlePromptAsync(text);
     setIsGenerating(true);
     let newMessages: Context = [
       ...context,
@@ -59,24 +123,46 @@ function App() {
     setContextState(newMessages);
     const assistantIndex = newMessages.length - 1;
     currentModel.provider.generateText(currentModel.model.name, newMessages, (chunk) => {
-      // smh, im disappointed
       newMessages = [...newMessages]
       newMessages[assistantIndex].message += chunk;
       setContextState(newMessages);
+    }).then(() => {
     }).finally(() => {
       setIsGenerating(false);
     }).catch((error) => {
       console.error(error);
-      setIsGenerating(false);
+    })
+  }
+
+  const doSummaryTitlePromptAsync = (userText: string) => {
+    if (!currentModel)
+      return;
+
+    let result = "";
+    currentModel.provider.generateText(currentModel.model.name, [
+      {
+        role: 'system',
+        model: currentModel.model.name,
+        message: `\n
+          - you will generate a short title based on the first message a user begins a conversation with
+          - ensure it is not more than 80 characters long
+          - the title should be a summary of the user's message
+          - do not use quotes or colons`,
+      },
+      {
+        role: 'user',
+        model: currentModel.model.name,
+        message: userText
+      }
+    ], (chunk) => {
+      result += chunk;
+    }).then(() => {
+      console.log(result);
+      currentChatName(result.replace(/<think>[\s\S]*?<\/think>/gi, '').trim());
     })
   }
 
   return <>
-    <SplitView className="h-[40px] rounded-lg py-[8px]">
-      <div className='bg-hard-frost-tslc hover:bg-frosted-accent-tslc border-1 border-solid border-medium-frost flex items-center p-[10px] py-0 transition-colors rounded-lg'>
-        <span className='text-xs font-sans text-light-frost m-0 p-0 font-bold'>New chat</span>
-      </div>
-    </SplitView>
     <div className='w-full h-[1px] bg-medium-frost mb-[8px]'></div>
     <SplitView className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col gap-[12px]" style={{ scrollbarWidth: 'none' }}>
       {
@@ -84,6 +170,7 @@ function App() {
           if (message.role === 'user') {
             return editingMessage === index ? (
               <InputContainer
+                key={index}
                 initialTypedText={message.message}
                 placeholderText="Recompose your prompt"
                 onEnter={(text) => {
@@ -105,7 +192,8 @@ function App() {
                 </button>
               </InputContainer>
             ) : (
-              <UserMessage
+              <MemoizedUserMessage
+                key={index}
                 message={message}
                 onClick={() => setEditingMessage(index)}
               />
@@ -125,36 +213,17 @@ function App() {
         return true;
       }} />
     </SplitView>
-    <SplitView className="h-[40px] flex items-center justify-center">
-      <div className="flex items-center gap-4">
-        <span className="text-xs font-sans text-light-frost flex items-center gap-[4px]">
-          Show/Hide
-          <div className="flex items-center gap-1 border-[1px] border-light-frost rounded-md border-solid p-[2px] pr-[3px]">
-            <span className="font-sans bg-light-frost text-black px-1.5 py-0.5 rounded">{isMac ? '⌘' : 'Ctrl'}</span>
-            <span className="font-sans">D</span>
-          </div>
-        </span>
-        <span className="text-xs font-sans text-light-frost flex items-center gap-[4px]">
-          Screenshot your screen
-          <div className="flex items-center gap-1 border-[1px] border-light-frost rounded-md border-solid p-[2px] pr-[3px]">
-            <span className="font-sans bg-light-frost text-black px-1.5 py-0.5 rounded">{isMac ? '⌘' : 'Ctrl'}</span>
-            <span className="font-sans bg-light-frost text-black px-0.5 py-0.5 rounded">⇧</span>
-            <span className="font-sans">S</span>
-          </div>
-        </span>
-      </div>
-    </SplitView>
   </>
-}
+});
 
-function UserMessage({ message, onClick }: { message: LLMMessage, onClick: () => void }) {
+const MemoizedUserMessage = memo(function UserMessage({ message, onClick }: { message: LLMMessage, onClick: () => void }) {
   return <div
     className='cursor-text py-[2px] px-[10px] box-border bg-hard-frost-tslc w-full min-h-[40px] rounded-lg flex items-center'
     onClick={onClick}
   >
     <span className='text-sm font-sans text-light-frost text-left'>{message.message}</span>
   </div>
-}
+});
 
 function AssistantMessageContainer({ message }: { message: LLMMessage }) {
   const components: Components = {
@@ -188,7 +257,7 @@ function AssistantMessageContainer({ message }: { message: LLMMessage }) {
           >
             {children as string | string[]}
           </SyntaxHighlighter>
-          <button 
+          <button
             className="text-xs mb-[4px] flex font-sans items-center bg-transparent border-none hover:bg-hard-frost-tslc transition-colors rounded-md p-[2px] px-[6px] cursor-pointer animate-pulse"
             onClick={() => {
               navigator.clipboard.writeText(children as string);
