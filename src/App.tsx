@@ -5,7 +5,6 @@ import { Components } from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { xonokai } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import ReactMarkdown from 'react-markdown';
-import { atomWithStorage } from 'jotai/utils'
 
 const isMac = navigator.userAgent.toLowerCase().includes('macintosh') || navigator.userAgent.toLowerCase().includes('apple');
 interface AvailableModel {
@@ -14,8 +13,39 @@ interface AvailableModel {
 }
 type ChatIdentifier = string;
 const createNewChatId = () => crypto.randomUUID();
-type Pages = 'chat' | 'history' | 'settings';
+interface ChatData {
+  context: Context;
+  lastUpdated: Date;
+  name: string;
+}
+const getChatData = (chatId: ChatIdentifier): ChatData => {
+  const chatData = localStorage.getItem('chat-' + chatId);
+  if (!chatData)
+    return { context: [], lastUpdated: new Date(), name: 'New chat' };
+  const parsedData = JSON.parse(chatData);
+  if (parsedData.name === undefined)
+    parsedData.name = 'Unnamed chat';
+  return parsedData;
+}
+const setChatData = (chatId: ChatIdentifier, chatData: Partial<ChatData>) => {
+  localStorage.setItem('chat-' + chatId, JSON.stringify({ ...getChatData(chatId), ...chatData }));
+}
+const getChatList = (): ChatIdentifier[] => {
+  const chatList = localStorage.getItem('chat-list');
+  if (!chatList)
+    return [];
+  return JSON.parse(chatList);
+}
+const appendChatList = (chatId: ChatIdentifier) => {
+  const chatList = getChatList();
+  // Remove if exists (to reposition to front)
+  const filteredList = chatList.filter(id => id !== chatId);
+  // Add to front of list
+  filteredList.unshift(chatId);
+  localStorage.setItem('chat-list', JSON.stringify(filteredList));
+}
 
+type Pages = 'chat' | 'history' | 'settings';
 const pageAtom = atom<Pages>('chat');
 const isGeneratingAtom = atom<boolean>(false);
 const availableModelsAtom = atom<AvailableModel[]>([]);
@@ -26,25 +56,51 @@ const currentChatAtom = atom<ChatIdentifier>(createNewChatId());
 function App() {
   const [page, setPage] = useAtom(pageAtom);
   const [currentChat, setCurrentChat] = useAtom(currentChatAtom);
-  const [currentChatName, setCurrentChatName] = useAtom(currentChatNameAtom);
+  const currentChatName = useAtomValue(currentChatNameAtom);
+  const [availableModels, setAvailableModels] = useAtom(availableModelsAtom);
+  const [currentModel, setCurrentModel] = useAtom(currentModelAtom);
+  
+  // Load list of all models
+  useEffect(() => {
+    const ollamaProvider = createOllamaProvider();
+    ollamaProvider.listModels().then((models) => {
+      const newAvailableModels = [...availableModels, ...models.map((model) => ({
+        model,
+        provider: ollamaProvider
+      }))];
+      newAvailableModels.sort((a, b) => a.model.name.localeCompare(b.model.name));
+      setAvailableModels(newAvailableModels);
+      setCurrentModel(newAvailableModels[0]);
+    });
+  }, [setAvailableModels]);
 
   return <>
     <SplitView className="box-border bg-frosted-accent-tslc min-h-[40px] rounded-xl p-[4px] my-[4px] justify-between">
       <div className='flex items-center justify-start gap-2 h-full'>
-        <ChatHeaderButton name={currentChatName} onClick={() => setPage('chat')} />
+        <ChatHeaderButton name={currentChatName} onClick={() => {
+          if (page === 'chat')
+            setCurrentChat(createNewChatId());
+          else
+            setPage('chat');
+        }} />
       </div>
       <div className='flex items-center gap-2'>
         <div className='box-border w-[1px] h-full py-[4px] bg-medium-frost'></div>
-        <SmallNavButton bigText>
+        <SmallNavButton bigText
+          onClick={() => {
+            setPage('chat');
+            setCurrentChat(createNewChatId());
+          }}
+        >
           +
         </SmallNavButton>
-        <SmallNavButton>
+        <SmallNavButton onClick={() => setPage('history')}>
           History
         </SmallNavButton>
       </div>
     </SplitView>
-    {page === 'chat' && <MemoizedChat key={currentChat} />}
-    {page === 'history' && <></>}
+    {page === 'chat' && <MemoizedChat key={currentChat} id={currentChat} />}
+    {page === 'history' && <History />}
     {page === 'settings' && <></>}
     <SplitView className="h-[40px] flex items-center justify-center">
       <div className="flex items-center gap-4">
@@ -63,8 +119,6 @@ function ChatHeaderButton({ onClick, name }: { onClick?: () => void, name: strin
   if (name.length > 25) {
     name = name.slice(0, 23) + '...';
   }
-  // Remove quotes if present
-  name = name.replace(/^["'](.*)["']$/, '$1');
   return <div className={`h-[30px] cursor-pointer overflow-x-auto bg-frosted-bg-tslc-darker hover:bg-frosted-bg border-1 border-solid border-white flex items-center p-[10px] py-0 transition-colors rounded-lg`} onClick={onClick}>
     <span className={`overflow-hidden text-[12px] font-sans text-white m-0 p-0 font-bold`}>{name}</span>
   </div>
@@ -78,26 +132,41 @@ function SmallNavButton({ children, onClick, bigText = false }: { children: Reac
   </div>
 }
 
-const MemoizedChat = memo(function Chat() {
-  const currentChatName = useSetAtom(currentChatNameAtom);
+function History() {
+  const chatList = getChatList();
+  const [currentChat, setCurrentChat] = useAtom(currentChatAtom);
+  const [page, setPage] = useAtom(pageAtom);
+  const onChatClick = (chatId: ChatIdentifier) => {
+    setCurrentChat(chatId);
+    setPage('chat');
+  }
+  
+  return <div className='flex flex-col box-border gap-[4px] w-full h-full overflow-y-auto p-2'>
+    {chatList.map((chatId) => {
+      const chatData = getChatData(chatId);
+      return <div onClick={() => onChatClick(chatId)} key={chatId} className='cursor-pointer box-border p-[4px] rounded-xl bg-hard-frost-tslc hover:bg-hard-frost-less-tslc w-full text-center font-sans text-white font-light text-[15px] justify-start items-start'>
+        <p className='text-left font-bold text-l m-0 p-0'>
+          {chatData.name}
+        </p>
+        <p className='text-left text-m m-0 p-0'>
+          {new Date(chatData.lastUpdated).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })} {new Date(chatData.lastUpdated).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
+        </p>
+      </div>
+    })}
+  </div>
+}
+
+const MemoizedChat = memo(function Chat({ id }: { id: ChatIdentifier }) {
+  const setCurrentChatName = useSetAtom(currentChatNameAtom);
   const setIsGenerating = useSetAtom(isGeneratingAtom);
   const [contextState, setContextState] = useState<Context>([]);
-  const [availableModels, setAvailableModels] = useAtom(availableModelsAtom);
   const [currentModel, setCurrentModel] = useAtom(currentModelAtom);
 
-  // Load list of all models
   useEffect(() => {
-    const ollamaProvider = createOllamaProvider();
-    ollamaProvider.listModels().then((models) => {
-      const newAvailableModels = [...availableModels, ...models.map((model) => ({
-        model,
-        provider: ollamaProvider
-      }))];
-      newAvailableModels.sort((a, b) => a.model.name.localeCompare(b.model.name));
-      setAvailableModels(newAvailableModels);
-      setCurrentModel(newAvailableModels[0]);
-    });
-  }, [setAvailableModels]);
+    const chatData = getChatData(id);
+    setCurrentChatName(chatData.name);
+    setContextState(chatData.context);
+  }, [id]);
 
   const [editingMessage, setEditingMessage] = useState<number | null>(null);
 
@@ -127,6 +196,8 @@ const MemoizedChat = memo(function Chat() {
       newMessages[assistantIndex].message += chunk;
       setContextState(newMessages);
     }).then(() => {
+      setChatData(id, { context: newMessages });
+      appendChatList(id);
     }).finally(() => {
       setIsGenerating(false);
     }).catch((error) => {
@@ -157,8 +228,18 @@ const MemoizedChat = memo(function Chat() {
     ], (chunk) => {
       result += chunk;
     }).then(() => {
-      console.log(result);
-      currentChatName(result.replace(/<think>[\s\S]*?<\/think>/gi, '').trim());
+      let title = result.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+      // Remove quotes only if they surround the entire string
+      title = title.replace(/^["'](.*)["']$/, (match, p1) => {
+        const firstChar = match[0];
+        const lastChar = match[match.length - 1];
+        if ((firstChar === '"' && lastChar === '"') || (firstChar === "'" && lastChar === "'")) {
+          return p1;
+        }
+        return match;
+      });
+      setChatData(id, { name: title });
+      setCurrentChatName(title);
     })
   }
 
@@ -203,6 +284,20 @@ const MemoizedChat = memo(function Chat() {
           }
         })
       }
+      {contextState.length == 0 &&
+        (() => {
+          const hour = new Date().getHours();
+          if (hour >= 6 && hour < 12) {
+            return <h1 className='font-light text-center text-light-frost text-m font-sans'>Good morning! ☀️</h1>;
+          } else if (hour >= 12 && hour < 19) {
+            return <h1 className='font-light text-center text-light-frost text-m font-sans'>Good afternoon! 🌤️</h1>;
+          } else if (hour >= 19 && hour < 24) {
+            return <h1 className='font-light text-center text-light-frost text-m font-sans'>Good evening! 🌙</h1>;
+          } else {
+            return <h1 className='font-light text-center text-light-frost text-m font-sans'>Good... night? 😴</h1>;
+          }
+        })()
+      }
       {<div className='w-full bg-transparent min-h-[60px]'></div>}
     </SplitView>
     <SplitView className="min-h-[110px]">
@@ -218,7 +313,7 @@ const MemoizedChat = memo(function Chat() {
 
 const MemoizedUserMessage = memo(function UserMessage({ message, onClick }: { message: LLMMessage, onClick: () => void }) {
   return <div
-    className='cursor-text py-[2px] px-[10px] box-border bg-hard-frost-tslc w-full min-h-[40px] rounded-lg flex items-center'
+    className='cursor-text py-[2px] px-[10px] box-border bg-hard-frost-tslc hover:bg-hard-frost-less-tslc w-full min-h-[40px] rounded-lg flex items-center'
     onClick={onClick}
   >
     <span className='text-sm font-sans text-light-frost text-left'>{message.message}</span>
@@ -241,7 +336,7 @@ function AssistantMessageContainer({ message }: { message: LLMMessage }) {
               boxSizing: 'border-box',
               fontSize: '11px',
               borderRadius: '8px',
-              backgroundColor: 'var(--frosted-bg-tslc-darker)',
+              backgroundColor: 'var(--frosted-bg-less-tslc-darker)',
               border: 'none',
               padding: '8px',
               maxHeight: '300px',

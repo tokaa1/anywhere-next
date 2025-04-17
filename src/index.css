@@ -40,9 +40,11 @@ body {
   --frosted-accent-tslc: rgba(80, 80, 80, 0.3);
   --frosted-bg: rgba(26, 26, 26, 1);
   --frosted-bg-tslc-darker: rgba(26, 26, 26, 0.3);
+  --frosted-bg-less-tslc-darker: rgba(26, 26, 26, 0.8);
   --frosted-accent: rgba(80, 80, 80, 1);
   --hard-frost: rgb(92, 92, 92);
   --hard-frost-tslc: rgba(92, 92, 92, 0.4);
+  --hard-frost-less-tslc: rgba(92, 92, 92, 0.7);
   --medium-frost: rgb(160, 160, 160);
   --light-frost: rgb(233, 233, 233);
 }

@@ -16,6 +16,8 @@ export default {
         'frosted-bg-tslc-darker': 'var(--frosted-bg-tslc-darker)',
         'hard-frost': 'var(--hard-frost)',
         'hard-frost-tslc': 'var(--hard-frost-tslc)',
+        'hard-frost-less-tslc': 'var(--hard-frost-less-tslc)',
+        'frosted-bg-less-tslc-darker': 'var(--frosted-bg-less-tslc-darker)',
       }
     }
   },
