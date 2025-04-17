@@ -2,8 +2,8 @@ import { atom, useAtom, useAtomValue, useSetAtom } from 'jotai'
 import { memo, useEffect, useRef, useState } from 'react'
 import { Context, LLMMessage, ModelMetadata, Provider, createOllamaProvider } from './providers';
 import Markdown, { Components } from 'react-markdown';
-import SyntaxHighlighter from 'react-syntax-highlighter';
-import { xonokai } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import {Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus, xonokai } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import ReactMarkdown from 'react-markdown';
 
 const isMac = navigator.userAgent.toLowerCase().includes('macintosh') || navigator.userAgent.toLowerCase().includes('apple');
@@ -327,7 +327,7 @@ const MemoizedUserMessage = memo(function UserMessage({ message, onClick }: { me
 const MemoizedCopyButton = memo(function CopyButton({ content }: { content: string }) {
   return (
     <button
-      className="text-xs mb-[4px] flex font-sans items-center bg-transparent border-none hover:bg-hard-frost-tslc transition-colors rounded-md p-[2px] px-[6px] cursor-pointer animate-pulse"
+      className="text-xs ml-[2px] my-[3px] flex font-sans items-center bg-transparent border-none hover:bg-hard-frost-tslc transition-colors rounded-md p-[2px] px-[0px] cursor-pointer animate-pulse"
       onClick={() => {
         navigator.clipboard.writeText(content);
       }}
@@ -350,11 +350,22 @@ function AssistantMessageContainer({ message }: { message: LLMMessage }) {
             const content = match ? String(children).replace(/\n$/, '') : String(children);
             return match ? (
               <>
+                <div className='w-full h-[12px] py-[6px] text-xs text-white font-sans font-bold'>
+                  {match[1]}
+                </div>
                 <SyntaxHighlighter
                   PreTag="div"
                   children={content}
                   language={match[1]}
                   style={xonokai}
+                  useInlineStyles={true}
+                  customStyle={{
+                    border: 'none',
+                    borderRadius: '10px',
+                    margin: 0,
+                    padding: '8px',
+                    boxSizing: 'border-box',
+                  }}
                 />
                 <MemoizedCopyButton content={content} />
               </>
