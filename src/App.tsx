@@ -1,8 +1,8 @@
 import { atom, useAtom, useAtomValue, useSetAtom } from 'jotai'
 import { memo, useEffect, useRef, useState } from 'react'
 import { Context, LLMMessage, ModelMetadata, Provider, createOllamaProvider } from './providers';
-import { Components } from 'react-markdown';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import Markdown, { Components } from 'react-markdown';
+import SyntaxHighlighter from 'react-syntax-highlighter';
 import { xonokai } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import ReactMarkdown from 'react-markdown';
 
@@ -116,9 +116,6 @@ function App() {
   </>
 }
 function ChatHeaderButton({ onClick, name }: { onClick?: () => void, name: string }) {
-  if (name.length > 25) {
-    name = name.slice(0, 23) + '...';
-  }
   return <div className={`h-[30px] cursor-pointer overflow-x-auto bg-frosted-bg-tslc-darker hover:bg-frosted-bg border-1 border-solid border-white flex items-center p-[10px] py-0 transition-colors rounded-lg`} onClick={onClick}>
     <span className={`overflow-hidden text-[12px] font-sans text-white m-0 p-0 font-bold`}>{name}</span>
   </div>
@@ -214,9 +211,10 @@ const MemoizedChat = memo(function Chat({ id }: { id: ChatIdentifier }) {
       {
         role: 'system',
         model: currentModel.model.name,
+        // System message from vercel/ai-chatbot
         message: `\n
           - you will generate a short title based on the first message a user begins a conversation with
-          - ensure it is not more than 80 characters long
+          - ensure it is not more than 25 characters long
           - the title should be a summary of the user's message
           - do not use quotes or colons`,
       },
@@ -229,7 +227,7 @@ const MemoizedChat = memo(function Chat({ id }: { id: ChatIdentifier }) {
       result += chunk;
     }).then(() => {
       let title = result.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-      // Remove quotes only if they surround the entire string
+      // Remove surrounding quotes using some crazy ass regex
       title = title.replace(/^["'](.*)["']$/, (match, p1) => {
         const firstChar = match[0];
         const lastChar = match[match.length - 1];
@@ -238,6 +236,12 @@ const MemoizedChat = memo(function Chat({ id }: { id: ChatIdentifier }) {
         }
         return match;
       });
+      // Remove any markdown formatting
+      title = title.replace(/[*_~`#\[\]]/g, '');
+      // Truncate with ... if longer than 25 chars
+      if (title.length > 25) {
+        title = title.slice(0, 23) + '...';
+      }
       setChatData(id, { name: title });
       setCurrentChatName(title);
     })
@@ -320,70 +324,50 @@ const MemoizedUserMessage = memo(function UserMessage({ message, onClick }: { me
   </div>
 });
 
+const MemoizedCopyButton = memo(function CopyButton({ content }: { content: string }) {
+  return (
+    <button
+      className="text-xs mb-[4px] flex font-sans items-center bg-transparent border-none hover:bg-hard-frost-tslc transition-colors rounded-md p-[2px] px-[6px] cursor-pointer animate-pulse"
+      onClick={() => {
+        navigator.clipboard.writeText(content);
+      }}
+    >
+      {'Copy code '}
+      <img src="/src/assets/copy-svgrepo-com.svg" width="16" height="16" alt="Copy" />
+    </button>
+  );
+});
+
+
 function AssistantMessageContainer({ message }: { message: LLMMessage }) {
-  const components: Components = {
-    code({ node, className, children, ...props }) {
-      const match = /language-(\w+)/.exec(className || '');
-      return match ? (
-        <>
-          <SyntaxHighlighter
-            style={xonokai}
-            language={match[1]}
-            customStyle={{
-              overflow: 'auto',
-              scrollbarWidth: 'thin',
-              maxWidth: '100%',
-              boxSizing: 'border-box',
-              fontSize: '11px',
-              borderRadius: '8px',
-              backgroundColor: 'var(--frosted-bg-less-tslc-darker)',
-              border: 'none',
-              padding: '8px',
-              maxHeight: '300px',
-              userSelect: 'text'
-            }}
-            wrapLines={false}
-            wrapLongLines={false}
-            showLineNumbers={false}
-            useInlineStyles={true}
-            codeTagProps={{
-              className: "code-tag"
-            }}
-          >
-            {children as string | string[]}
-          </SyntaxHighlighter>
-          <button
-            className="text-xs mb-[4px] flex font-sans items-center bg-transparent border-none hover:bg-hard-frost-tslc transition-colors rounded-md p-[2px] px-[6px] cursor-pointer animate-pulse"
-            onClick={() => {
-              navigator.clipboard.writeText(children as string);
-            }}
-          >
-            {'Copy code '}
-            <img src="/src/assets/copy-svgrepo-com.svg" width="16" height="16" alt="Copy" />
-          </button>
-        </>
-      ) : (
-        <code className={className} {...props}>
-          {children}
-        </code>
-      );
-    },
-    p({ node, className, children, ...props }) {
-      return <p className={`${className} font-sans m-0 p-0 select-text`} {...props}>{children}</p>
-    },
-    pre({ node, className, children, ...props }) {
-      return <pre className={`${className} m-0 p-0 max-w-[100%] w-[100%] box-border`} {...props}>{children}</pre>
-    },
-    ul({ node, className, children, ...props }) {
-      return <ul className={`${className} p-[0px] pt-0 my-[6px] pl-[20px]`} {...props}>{children}</ul>
-    },
-    ol({ node, className, children, ...props }) {
-      return <ol className={`${className} p-[0px] pt-0 my-[6px] pl-[20px]`} {...props}>{children}</ol>
-    }
-  };
   return (
     <div className='flex flex-col items-start p-[5px] text-[14px] select-text text-white'>
-      <ReactMarkdown components={components}>{message.message}</ReactMarkdown>
+      <Markdown
+        components={{
+          code(props) {
+            const {children, className, node, ...rest} = props
+            const match = /language-(\w+)/.exec(className || '')
+            const content = match ? String(children).replace(/\n$/, '') : String(children);
+            return match ? (
+              <>
+                <SyntaxHighlighter
+                  PreTag="div"
+                  children={content}
+                  language={match[1]}
+                  style={xonokai}
+                />
+                <MemoizedCopyButton content={content} />
+              </>
+            ) : (
+              <code {...rest} className={className}>
+                {content}
+              </code>
+            )
+          }
+        }}
+      >
+        {message.message}
+      </Markdown>
     </div>
   );
 }
