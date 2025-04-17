@@ -450,7 +450,7 @@ function InputContainer({ className, initialTypedText = "", placeholderText, onE
           value={currentModel?.model.name || ''}
         >
           {availableModels.map((model) => (
-            <option value={model.model.name}>{model.model.name}</option>
+            <option key={model.model.name} value={model.model.name}>{model.model.name}</option>
           ))}
         </select>
         <div className="flex items-center gap-2">
