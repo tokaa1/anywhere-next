@@ -75,7 +75,7 @@ function App() {
   }, [setAvailableModels]);
 
   return <>
-    <SplitView className="box-border bg-frosted-accent-tslc min-h-[40px] rounded-xl p-[4px] my-[4px] justify-between">
+    <SplitView className="box-border min-h-[40px] rounded-xl p-[4px] my-[4px] justify-between">
       <div className='flex items-center justify-start gap-2 h-full'>
         <ChatHeaderButton name={currentChatName} onClick={() => {
           if (page === 'chat')
@@ -374,7 +374,22 @@ function AssistantMessageContainer({ message }: { message: LLMMessage }) {
                 {content}
               </code>
             )
-          }
+          },
+          p: ({children}) => <p className="my-[4px]">{children}</p>,
+          h1: ({children}) => <h1 className="my-[4px]">{children}</h1>,
+          h2: ({children}) => <h2 className="my-[4px]">{children}</h2>,
+          h3: ({children}) => <h3 className="my-[4px]">{children}</h3>,
+          h4: ({children}) => <h4 className="my-[4px]">{children}</h4>,
+          h5: ({children}) => <h5 className="my-[4px]">{children}</h5>,
+          h6: ({children}) => <h6 className="my-[4px]">{children}</h6>,
+          ul: ({children}) => <ul className="my-[4px]">{children}</ul>,
+          ol: ({children}) => <ol className="my-[4px]">{children}</ol>,
+          li: ({children}) => <li className="my-[4px]">{children}</li>,
+          blockquote: ({children}) => <blockquote className="my-[4px]">{children}</blockquote>,
+          table: ({children}) => <table className="my-[4px]">{children}</table>,
+          tr: ({children}) => <tr className="my-[4px]">{children}</tr>,
+          th: ({children}) => <th className="my-[4px]">{children}</th>,
+          td: ({children}) => <td className="my-[4px]">{children}</td>,
         }}
       >
         {message.message}
@@ -426,7 +441,7 @@ function InputContainer({ className, initialTypedText = "", placeholderText, onE
     }
   }
 
-  return <div ref={containerRef} className={`box-border flex bg-hard-frost-tslc w-full p-[10px] rounded-lg shadow-[0_0_10px_var(--frosted-bg-tslc-darker)] border ${className || ''}`}>
+  return <div ref={containerRef} className={`box-border border-solid border-hard-frost flex w-full p-[10px] rounded-lg shadow-[0_0_10px_var(--frosted-bg-tslc-darker)] border ${className || ''}`}>
     <div className="flex flex-col w-full h-full p-0 m-0 justify-between">
       <textarea
         className={`w-full h-full min-h-[${small ? '20' : '60'}px] max-h-[300px] text-sm bg-transparent border-none outline-none resize-none font-sans placeholder:text-medium-frost overflow-y-auto`}
