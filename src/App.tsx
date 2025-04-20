@@ -1,4 +1,5 @@
-import { atom, useAtom, useAtomValue, useSetAtom } from 'jotai'
+import { Atom, atom, useAtom, useAtomValue, useSetAtom } from 'jotai'
+import { atomWithStorage } from 'jotai/utils'
 import { memo, useEffect, useRef, useState } from 'react'
 import { Context, LLMMessage, ModelMetadata, Provider, createOllamaProvider } from './providers';
 import Markdown, { Components } from 'react-markdown';
@@ -156,12 +157,32 @@ function History() {
   </div>
 }
 
+const titleModelAtom = atomWithStorage<string | null>('titleModel', null);
+
 function Settings() {
+  const availableModels = useAtomValue(availableModelsAtom);
   return (
-    <div className="flex flex-col gap-[2px] p-4">
-      
-    </div>
+    <SplitView className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col gap-[2px]" style={{ scrollbarWidth: 'none' }}>
+      <DropdownSetting label="Summarization Model (for chat titles)" atom={titleModelAtom} options={availableModels.map((model) => model.model.name)} />
+    </SplitView>
   );
+}
+
+function DropdownSetting({label, atom, options}: {label: string, atom: Atom<any>, options: string[]}) {
+  const [value, setValue] = useAtom(atom);
+  return <div className='flex flex-col gap-[2px]'>
+    <span className='text-xs font-sans text-white'>{label}</span>
+    <select 
+      className='text-xs font-sans text-white' 
+      // @ts-ignore
+      onChange={(e) => setValue(e.target.value)}
+      value={value}
+    >
+      {options.map((option) => (
+        <option key={option} value={option}>{option}</option>
+      ))}
+    </select>
+  </div>
 }
 
 const MemoizedChat = memo(function Chat({ id }: { id: ChatIdentifier }) {
