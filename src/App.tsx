@@ -190,6 +190,8 @@ const MemoizedChat = memo(function Chat({ id }: { id: ChatIdentifier }) {
   const setIsGenerating = useSetAtom(isGeneratingAtom);
   const [contextState, setContextState] = useState<Context>([]);
   const [currentModel, setCurrentModel] = useAtom(currentModelAtom);
+  const availableModels = useAtomValue(availableModelsAtom);
+  const titleModel = useAtomValue(titleModelAtom);
 
   useEffect(() => {
     const chatData = getChatData(id);
@@ -239,10 +241,14 @@ const MemoizedChat = memo(function Chat({ id }: { id: ChatIdentifier }) {
       return;
 
     let result = "";
-    currentModel.provider.generateText(currentModel.model.name, [
+    const model = titleModel ? availableModels.find((model) => model.model.name === titleModel) : currentModel;
+    if (!model)
+      return;
+
+    model.provider.generateText(model.model.name, [
       {
         role: 'system',
-        model: currentModel.model.name,
+        model: model.model.name,
         // System message from vercel/ai-chatbot
         message: `\n
           - you will generate a short title based on the first message a user begins a conversation with
@@ -252,7 +258,7 @@ const MemoizedChat = memo(function Chat({ id }: { id: ChatIdentifier }) {
       },
       {
         role: 'user',
-        model: currentModel.model.name,
+        model: model.model.name,
         message: userText
       }
     ], (chunk) => {
