@@ -97,11 +97,14 @@ function App() {
         <SmallNavButton onClick={() => setPage('history')}>
           History
         </SmallNavButton>
+        <SmallNavButton onClick={() => setPage('settings')}>
+          <img src="/src/assets/settings-maticons.svg" width="16" height="16" alt="Settings" />
+        </SmallNavButton>
       </div>
     </SplitView>
     {page === 'chat' && <MemoizedChat key={currentChat} id={currentChat} />}
     {page === 'history' && <History />}
-    {page === 'settings' && <></>}
+    {page === 'settings' && <Settings />}
     <SplitView className="h-[40px] flex items-center justify-center">
       <div className="flex items-center gap-4">
         <span className="text-xs font-sans text-white flex items-center gap-[4px]">
@@ -151,6 +154,14 @@ function History() {
       </div>
     })}
   </div>
+}
+
+function Settings() {
+  return (
+    <div className="flex flex-col gap-[2px] p-4">
+      
+    </div>
+  );
 }
 
 const MemoizedChat = memo(function Chat({ id }: { id: ChatIdentifier }) {
